@@ -2,71 +2,67 @@
 #include <fstream>
 #include <winsock2.h>
 #include <cstring>
+#include <ctime>  // Para medir o tempo
 
 #define SERVER "127.0.0.1"
 #define PORT 8080
 #define BUF_SIZE 1024  // Tamanho do buffer
 
 int main() {
-    // Inicializa a biblioteca Winsock
-    WSADATA wsa;
-    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
-        std::cerr << "Erro ao inicializar o Winsock!" << std::endl;
+    WSADATA wsaData;
+    SOCKET clientSocket;
+    struct sockaddr_in serverAddr;
+    char pacote[BUF_SIZE];
+    int totalPacotes = 10000; // Total de pacotes a enviar
+
+    // Inicializa o Winsock
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        std::cerr << "Erro ao inicializar o Winsock." << std::endl;
         return 1;
     }
 
-    // Cria o socket UDP
-    SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (sock == INVALID_SOCKET) {
-        std::cerr << "Erro ao criar o socket!" << std::endl;
+    // Cria o socket do cliente
+    clientSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (clientSocket == INVALID_SOCKET) {
+        std::cerr << "Erro ao criar o socket." << std::endl;
         WSACleanup();
         return 1;
     }
 
-    // Configura o endereço do servidor
-    sockaddr_in server;
-    server.sin_family = AF_INET;
-    server.sin_port = htons(PORT);
-    server.sin_addr.s_addr = inet_addr(SERVER);
+    // Prepara o endereço do servidor
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(PORT);
+    serverAddr.sin_addr.s_addr = inet_addr(SERVER);
 
-    // Abre o arquivo de dados (teste.bin) para envio
-    std::ifstream file("teste.bin", std::ios::binary);
-    if (!file) {
-        std::cerr << "Erro ao abrir o arquivo!" << std::endl;
-        closesocket(sock);
+    // Abrir o arquivo para registrar os pacotes enviados
+    std::ofstream logFile("pacotes_enviados.txt"); // Arquivo para registrar os pacotes enviados
+    if (!logFile.is_open()) {
+        std::cerr << "Erro ao abrir o arquivo para gravar os pacotes enviados!" << std::endl;
+        closesocket(clientSocket);
         WSACleanup();
         return 1;
     }
 
-    char buffer[BUF_SIZE];
-    int packet_number = 0;
+    // Loop para enviar os pacotes
+    for (int i = 0; i < totalPacotes; i++) {
+        // Preenche o pacote com dados
+        std::memset(pacote, 0, sizeof(pacote));  // Limpar o buffer
+        std::sprintf(pacote, "Pacote %d", i + 1); // Exemplo de conteúdo do pacote
 
-    // Envia os pacotes do arquivo
-    while (file.read(buffer, sizeof(buffer))) {
-        // Envia o pacote para o servidor
-        int bytes_read = file.gcount();  // Tamanho do pacote lido
-        if (sendto(sock, buffer, bytes_read, 0, (struct sockaddr*)&server, sizeof(server)) == SOCKET_ERROR) {
-            std::cerr << "Erro ao enviar o pacote!" << std::endl;
-            break;
-        }
+        // Envia o pacote
+        sendto(clientSocket, pacote, sizeof(pacote), 0, (struct sockaddr*)&serverAddr, sizeof(serverAddr));
 
-        // Imprime o número do pacote enviado
-        std::cout << "Enviando pacote " << ++packet_number << std::endl;
+        // Registra o envio
+        std::time_t currentTime = std::time(nullptr); // Obtém o horário atual
+        logFile << i + 1 << "," << currentTime << std::endl; // Registra o número do pacote e o tempo
+        std::cout << "Pacote " << i + 1 << " enviado" << std::endl;
     }
 
-    // Envia os últimos bytes restantes, caso o arquivo não seja múltiplo de BUF_SIZE
-    if (file.gcount() > 0) {
-        if (sendto(sock, buffer, file.gcount(), 0, (struct sockaddr*)&server, sizeof(server)) == SOCKET_ERROR) {
-            std::cerr << "Erro ao enviar o pacote!" << std::endl;
-        }
-        std::cout << "Enviando pacote " << ++packet_number << std::endl;
-    }
+    // Fecha o arquivo de log
+    logFile.close();
 
-    std::cout << "Arquivo enviado com sucesso!" << std::endl;
-
-    // Fecha o arquivo e o socket
-    file.close();
-    closesocket(sock);
+    // Fecha o socket
+    closesocket(clientSocket);
     WSACleanup();
 
     return 0;

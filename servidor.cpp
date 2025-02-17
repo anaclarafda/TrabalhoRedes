@@ -2,72 +2,74 @@
 #include <windows.h>
 #include <iostream>
 #include <fstream>
-#include <cstring>
+#include <ctime> // Para medir tempo
 
 #pragma comment(lib, "ws2_32.lib")
-
 #define SERVER_PORT 8080
 #define BUFFER_SIZE 1024
 
 int main() {
-    WSADATA wsa;
-    SOCKET sock;
-    sockaddr_in server, client;
-    int client_len = sizeof(client);
+    WSADATA wsaData;
+    SOCKET serverSocket, clientSocket;
+    struct sockaddr_in serverAddr, clientAddr;
+    int clientAddrLen = sizeof(clientAddr);
     char buffer[BUFFER_SIZE];
 
-    // Inicializa a biblioteca Winsock
-    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
-        std::cerr << "Erro ao inicializar o Winsock!" << std::endl;
+    // Inicializa o Winsock
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        std::cerr << "Erro ao inicializar o Winsock." << std::endl;
         return 1;
     }
 
-    // Cria o socket UDP
-    sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (sock == INVALID_SOCKET) {
-        std::cerr << "Erro ao criar o socket!" << std::endl;
+    // Cria o socket do servidor
+    serverSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (serverSocket == INVALID_SOCKET) {
+        std::cerr << "Erro ao criar o socket." << std::endl;
         WSACleanup();
         return 1;
     }
 
     // Prepara o endereço do servidor
-    server.sin_family = AF_INET;
-    server.sin_port = htons(SERVER_PORT);
-    server.sin_addr.s_addr = INADDR_ANY;
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_port = htons(SERVER_PORT);
+    serverAddr.sin_addr.s_addr = INADDR_ANY;
 
-    // Associa o socket ao endereço e porta
-    if (bind(sock, (struct sockaddr*)&server, sizeof(server)) == SOCKET_ERROR) {
-        std::cerr << "Erro ao associar o socket!" << std::endl;
-        closesocket(sock);
+    // Associa o socket ao endereço do servidor
+    if (bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
+        std::cerr << "Erro ao associar o socket ao endereço." << std::endl;
+        closesocket(serverSocket);
         WSACleanup();
         return 1;
     }
 
-    std::cout << "Servidor aguardando pacotes na porta " << SERVER_PORT << "..." << std::endl;
+    std::cout << "Servidor aguardando pacotes..." << std::endl;
 
-    // Recebe os pacotes do cliente
+    // Para registrar os dados de pacotes
+    int pacoteCount = 0;
+    std::ofstream logFile("pacotes_recebidos.txt"); // Arquivo para registrar os pacotes
+
+    // Loop para receber pacotes
     while (true) {
-        int bytes_received = recvfrom(sock, buffer, BUFFER_SIZE, 0, (struct sockaddr*)&client, &client_len);
-        if (bytes_received == SOCKET_ERROR) {
-            std::cerr << "Erro ao receber pacote!" << std::endl;
+        int bytesReceived = recvfrom(serverSocket, buffer, BUFFER_SIZE, 0, (struct sockaddr*)&clientAddr, &clientAddrLen);
+        if (bytesReceived == SOCKET_ERROR) {
+            std::cerr << "Erro ao receber dados." << std::endl;
             continue;
         }
 
-        // Exibe o conteúdo recebido
-        std::cout << "Pacote recebido: " << bytes_received << " bytes" << std::endl;
-        std::cout << "Conteúdo do pacote: ";
-        for (int i = 0; i < bytes_received; i++) {
-            std::cout << buffer[i];  // Imprime os dados do pacote
-        }
-        std::cout << std::endl;
+        // Marca o pacote recebido
+        pacoteCount++;
 
-        // Responde ao cliente
-        const char* msg = "Pacote recebido com sucesso!";
-        sendto(sock, msg, strlen(msg), 0, (struct sockaddr*)&client, client_len);
+        // Registra a hora do recebimento
+        std::time_t currentTime = std::time(nullptr);
+        logFile << pacoteCount << "," << currentTime << std::endl;
+
+        // Apenas imprime uma mensagem de cada vez
+        std::cout << "Pacote " << pacoteCount << " recebido" << std::endl;
     }
 
-    // Fecha o socket
-    closesocket(sock);
+    // Fecha o arquivo de log
+    logFile.close();
+    closesocket(serverSocket);
     WSACleanup();
     return 0;
 }
