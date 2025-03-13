@@ -35,7 +35,7 @@ int main() {
     serverAddr.sin_addr.s_addr = inet_addr(SERVER);
 
     // Abrir o arquivo para registrar os pacotes enviados
-    std::ofstream logFile("pacotes_enviados.txt"); // Arquivo para registrar os pacotes enviados
+    std::ofstream logFile("pacotes_enviados.txt");
     if (!logFile.is_open()) {
         std::cerr << "Erro ao abrir o arquivo para gravar os pacotes enviados!" << std::endl;
         closesocket(clientSocket);
@@ -45,23 +45,20 @@ int main() {
 
     // Loop para enviar os pacotes
     for (int i = 0; i < totalPacotes; i++) {
-        // Preenche o pacote com dados
-        std::memset(pacote, 0, sizeof(pacote));  // Limpar o buffer
-        std::sprintf(pacote, "Pacote %d", i + 1); // Exemplo de conteúdo do pacote
+        // Preenche o pacote com número de sequência e dados
+        std::sprintf(pacote, "%d|Pacote %d", i + 1, i + 1);
 
         // Envia o pacote
-        sendto(clientSocket, pacote, sizeof(pacote), 0, (struct sockaddr*)&serverAddr, sizeof(serverAddr));
+        sendto(clientSocket, pacote, sizeof(pacote), 0, 
+               (struct sockaddr*)&serverAddr, sizeof(serverAddr));
 
         // Registra o envio
-        std::time_t currentTime = std::time(nullptr); // Obtém o horário atual
-        logFile << i + 1 << "," << currentTime << std::endl; // Registra o número do pacote e o tempo
+        std::time_t currentTime = std::time(nullptr); 
+        logFile << i + 1 << "," << currentTime << std::endl; 
         std::cout << "Pacote " << i + 1 << " enviado" << std::endl;
     }
 
-    // Fecha o arquivo de log
     logFile.close();
-
-    // Fecha o socket
     closesocket(clientSocket);
     WSACleanup();
 

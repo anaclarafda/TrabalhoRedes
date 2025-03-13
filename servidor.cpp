@@ -2,6 +2,7 @@
 #include <windows.h>
 #include <iostream>
 #include <fstream>
+#include <map> // Para garantir a ordem dos pacotes
 #include <ctime> // Para medir tempo
 
 #pragma comment(lib, "ws2_32.lib")
@@ -10,7 +11,7 @@
 
 int main() {
     WSADATA wsaData;
-    SOCKET serverSocket, clientSocket;
+    SOCKET serverSocket;
     struct sockaddr_in serverAddr, clientAddr;
     int clientAddrLen = sizeof(clientAddr);
     char buffer[BUFFER_SIZE];
@@ -44,31 +45,40 @@ int main() {
 
     std::cout << "Servidor aguardando pacotes..." << std::endl;
 
-    // Para registrar os dados de pacotes
-    int pacoteCount = 0;
-    std::ofstream logFile("pacotes_recebidos.txt"); // Arquivo para registrar os pacotes
+    // Para armazenar pacotes na ordem correta
+    std::map<int, std::string> pacotesRecebidos;
+    int ultimoPacoteRecebido = -1;
 
     // Loop para receber pacotes
     while (true) {
-        int bytesReceived = recvfrom(serverSocket, buffer, BUFFER_SIZE, 0, (struct sockaddr*)&clientAddr, &clientAddrLen);
+        int bytesReceived = recvfrom(serverSocket, buffer, BUFFER_SIZE, 0, 
+                                     (struct sockaddr*)&clientAddr, &clientAddrLen);
         if (bytesReceived == SOCKET_ERROR) {
             std::cerr << "Erro ao receber dados." << std::endl;
             continue;
         }
 
-        // Marca o pacote recebido
-        pacoteCount++;
+        // Extrair número do pacote e dados
+        int numeroPacote;
+        char dados[BUFFER_SIZE];
+        sscanf(buffer, "%d|%s", &numeroPacote, dados);
 
-        // Registra a hora do recebimento
-        std::time_t currentTime = std::time(nullptr);
-        logFile << pacoteCount << "," << currentTime << std::endl;
+        // Armazenar o pacote recebido
+        pacotesRecebidos[numeroPacote] = dados;
 
-        // Apenas imprime uma mensagem de cada vez
-        std::cout << "Pacote " << pacoteCount << " recebido" << std::endl;
+        // Verificar se há pacotes perdidos
+        if (numeroPacote != ultimoPacoteRecebido + 1) {
+            std::cerr << "Pacote fora de sequência detectado. Esperado: "
+                      << ultimoPacoteRecebido + 1 << " | Recebido: " << numeroPacote << std::endl;
+        }
+
+        // Atualizar o último pacote recebido
+        ultimoPacoteRecebido = numeroPacote;
+
+        // Exibe confirmação
+        std::cout << "Pacote " << numeroPacote << " recebido." << std::endl;
     }
 
-    // Fecha o arquivo de log
-    logFile.close();
     closesocket(serverSocket);
     WSACleanup();
     return 0;
