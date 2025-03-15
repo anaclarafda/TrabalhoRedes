@@ -1,12 +1,12 @@
 #include <winsock2.h>
 #include <windows.h>
 #include <iostream>
-#include <fstream>
 #include <map>
 
 #pragma comment(lib, "ws2_32.lib")
 #define SERVER_PORT 8080
 #define BUFFER_SIZE 1024
+#define JANELA_MAXIMA 5 // Tamanho da janela de recepção do servidor
 
 int main()
 {
@@ -16,14 +16,12 @@ int main()
     int clientAddrLen = sizeof(clientAddr);
     char buffer[BUFFER_SIZE];
 
-    // Inicializa o Winsock
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
     {
         std::cerr << "Erro ao inicializar o Winsock." << std::endl;
         return 1;
     }
 
-    // Cria o socket UDP
     serverSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (serverSocket == INVALID_SOCKET)
     {
@@ -32,12 +30,10 @@ int main()
         return 1;
     }
 
-    // Configura o endereço do servidor
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(SERVER_PORT);
     serverAddr.sin_addr.s_addr = INADDR_ANY;
 
-    // Associa o socket à porta
     if (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR)
     {
         std::cerr << "Erro ao associar o socket ao endereço." << std::endl;
@@ -49,7 +45,8 @@ int main()
     std::cout << "Servidor aguardando pacotes..." << std::endl;
 
     std::map<int, std::string> pacotesRecebidos;
-    int ultimoACK = 0; // Último pacote confirmado
+    int ultimoACK = 0;
+    int janelaAtual = JANELA_MAXIMA;
 
     while (true)
     {
@@ -68,16 +65,25 @@ int main()
         pacotesRecebidos[numeroPacote] = dados;
         std::cout << "Pacote " << numeroPacote << " recebido." << std::endl;
 
-        // Enviar ACK acumulativo
+        // Ajuste da janela: Se o servidor estiver sobrecarregado, reduz a janela
+        if (pacotesRecebidos.size() > JANELA_MAXIMA)
+        {
+            janelaAtual = std::max(1, janelaAtual - 1);
+        }
+        else
+        {
+            janelaAtual = std::min(JANELA_MAXIMA, janelaAtual + 1);
+        }
+
         while (pacotesRecebidos.count(ultimoACK + 1))
         {
             ultimoACK++;
         }
 
         char ackMsg[BUFFER_SIZE];
-        sprintf(ackMsg, "ACK %d", ultimoACK);
+        sprintf(ackMsg, "ACK %d JANELA %d", ultimoACK, janelaAtual);
         sendto(serverSocket, ackMsg, sizeof(ackMsg), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
-        std::cout << "ACK " << ultimoACK << " enviado." << std::endl;
+        std::cout << "ACK " << ultimoACK << " enviado. Janela: " << janelaAtual << std::endl;
     }
 
     closesocket(serverSocket);
