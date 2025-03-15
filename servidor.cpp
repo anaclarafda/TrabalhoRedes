@@ -1,14 +1,15 @@
 #include <winsock2.h>
 #include <windows.h>
 #include <iostream>
-#include <map>
-#include <ctime>
-#include <cstdlib> // Para gerar perdas aleatórias
+#include <fstream>
+#include <map>   // Para armazenar pacotes ordenadamente
+#include <ctime> // Para gerar perdas aleatórias
 
 #pragma comment(lib, "ws2_32.lib")
 #define SERVER_PORT 8080
 #define BUFFER_SIZE 1024
-#define PERDA_PERCENTUAL 10 // % de pacotes que serão descartados aleatoriamente
+#define JANELA_RECEBIMENTO 32 // Tamanho da janela de recepção
+#define TAXA_PERDA 10         // Percentual de pacotes descartados (ex: 10%)
 
 int main()
 {
@@ -38,7 +39,7 @@ int main()
 
     if (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR)
     {
-        std::cerr << "Erro ao associar o socket ao endereço." << std::endl;
+        std::cerr << "Erro ao associar o socket ao endereco." << std::endl;
         closesocket(serverSocket);
         WSACleanup();
         return 1;
@@ -47,9 +48,8 @@ int main()
     std::cout << "Servidor aguardando pacotes..." << std::endl;
 
     std::map<int, std::string> pacotesRecebidos;
-    int ultimoPacoteContiguo = 0; // Último pacote recebido em ordem
-
-    srand(time(0)); // Inicializa a semente do gerador de números aleatórios
+    int ultimoPacoteRecebido = 0;
+    srand(time(0));
 
     while (true)
     {
@@ -61,38 +61,35 @@ int main()
             continue;
         }
 
+        // Extrai número do pacote e dados
         int numeroPacote;
         char dados[BUFFER_SIZE];
         sscanf(buffer, "%d|%s", &numeroPacote, dados);
 
-        // Simulação de perda de pacotes
-        if ((rand() % 100) < PERDA_PERCENTUAL)
+        // Simula perda de pacotes com uma chance de TAXA_PERDA%
+        if (rand() % 100 < TAXA_PERDA)
         {
-            std::cerr << "Pacote " << numeroPacote << " perdido (simulacao)!" << std::endl;
-            continue;
+            std::cerr << "Pacote " << numeroPacote << " PERDIDO!" << std::endl;
+            continue; // Ignora o processamento do pacote
         }
 
+        // Armazena pacotes na ordem correta
         pacotesRecebidos[numeroPacote] = dados;
 
-        // Verifica se recebemos o próximo pacote esperado
-        if (numeroPacote == ultimoPacoteContiguo + 1)
-        {
-            ultimoPacoteContiguo = numeroPacote;
-
-            // Atualiza o último pacote contíguo recebido corretamente
-            while (pacotesRecebidos.count(ultimoPacoteContiguo + 1))
-            {
-                ultimoPacoteContiguo++;
-            }
-        }
-
-        // Enviar ACK acumulativo para o cliente
-        char ackMsg[50];
-        sprintf(ackMsg, "ACK %d", ultimoPacoteContiguo);
-        sendto(serverSocket, ackMsg, sizeof(ackMsg), 0,
+        // Confirmação acumulativa (ACK acumulativo)
+        ultimoPacoteRecebido = numeroPacote;
+        char ackMessage[50];
+        sprintf(ackMessage, "ACK %d", ultimoPacoteRecebido);
+        sendto(serverSocket, ackMessage, sizeof(ackMessage), 0,
                (struct sockaddr *)&clientAddr, clientAddrLen);
 
-        std::cout << "Pacote " << numeroPacote << " recebido. Enviando ACK " << ultimoPacoteContiguo << "." << std::endl;
+        // Informa a janela de recepção ao cliente
+        char janelaMessage[50];
+        sprintf(janelaMessage, "JANELA %d", JANELA_RECEBIMENTO);
+        sendto(serverSocket, janelaMessage, sizeof(janelaMessage), 0,
+               (struct sockaddr *)&clientAddr, clientAddrLen);
+
+        std::cout << "Pacote " << numeroPacote << " recebido e confirmado com ACK." << std::endl;
     }
 
     closesocket(serverSocket);
