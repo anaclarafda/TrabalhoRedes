@@ -36,7 +36,12 @@ int main()
 
     int ultimoACKRecebido = 0;
     std::map<int, bool> pacotesEnviados;
-    int janelaEnvio = 5;
+
+    // Variáveis do Controle de Congestionamento
+    int cwnd = 1;          // Janela de Congestionamento (inicialmente 1)
+    int ssthresh = 16;     // Limite de Slow Start
+    int ackDuplicados = 0; // Contador de ACKs duplicados
+    int ultimoACK = -1;    // Último ACK recebido
 
     for (int i = 1; i <= TOTAL_PACOTES; i++)
     {
@@ -46,14 +51,14 @@ int main()
     while (ultimoACKRecebido < TOTAL_PACOTES)
     {
         int enviados = 0;
-        for (int i = ultimoACKRecebido + 1; i <= TOTAL_PACOTES && enviados < janelaEnvio; i++)
+        for (int i = ultimoACKRecebido + 1; i <= TOTAL_PACOTES && enviados < cwnd; i++)
         {
             if (!pacotesEnviados[i])
             {
                 std::sprintf(pacote, "%d|Pacote %d", i, i);
                 sendto(clientSocket, pacote, sizeof(pacote), 0,
                        (struct sockaddr *)&serverAddr, sizeof(serverAddr));
-                std::cout << "Pacote " << i << " enviado." << std::endl;
+                std::cout << "Pacote " << i << " enviado (cwnd=" << cwnd << ")." << std::endl;
                 pacotesEnviados[i] = true;
                 enviados++;
             }
@@ -63,18 +68,49 @@ int main()
                                      (struct sockaddr *)&serverAddr, &serverAddrLen);
         if (bytesReceived > 0)
         {
-            int novoACK, novaJanela;
-            sscanf(ackBuffer, "ACK %d JANELA %d", &novoACK, &novaJanela);
+            int novoACK;
+            sscanf(ackBuffer, "ACK %d", &novoACK);
+
             if (novoACK > ultimoACKRecebido)
             {
                 ultimoACKRecebido = novoACK;
-                janelaEnvio = novaJanela;
-                std::cout << "ACK " << novoACK << " recebido. Nova janela: " << janelaEnvio << std::endl;
+                std::cout << "ACK " << novoACK << " recebido." << std::endl;
+
+                // Se estamos na fase de Slow Start
+                if (cwnd < ssthresh)
+                {
+                    cwnd *= 2; // Crescimento exponencial
+                }
+                else
+                {
+                    cwnd += 1; // Crescimento linear (Congestion Avoidance)
+                }
+
+                ackDuplicados = 0; // Reseta o contador de ACKs duplicados
             }
+            else if (novoACK == ultimoACK)
+            {
+                ackDuplicados++;
+                if (ackDuplicados == 3)
+                { // Se recebeu 3 ACKs duplicados, assume perda
+                    std::cout << "Perda detectada! Reduzindo cwnd." << std::endl;
+                    ssthresh = cwnd / 2;
+                    cwnd = ssthresh;
+                    ackDuplicados = 0;
+                }
+            }
+            else
+            {
+                ackDuplicados = 0;
+            }
+
+            ultimoACK = novoACK;
         }
         else
         {
-            std::cout << "Timeout! Reenviando pacotes..." << std::endl;
+            std::cout << "Timeout! Reduzindo cwnd." << std::endl;
+            ssthresh = cwnd / 2;
+            cwnd = 1; // Volta para Slow Start
         }
     }
 

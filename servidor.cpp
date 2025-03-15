@@ -2,11 +2,13 @@
 #include <windows.h>
 #include <iostream>
 #include <map>
+#include <ctime>
+#include <cstdlib> // Para gerar perdas aleatórias
 
 #pragma comment(lib, "ws2_32.lib")
 #define SERVER_PORT 8080
 #define BUFFER_SIZE 1024
-#define JANELA_MAXIMA 5 // Tamanho da janela de recepção do servidor
+#define PERDA_PERCENTUAL 10 // % de pacotes que serão descartados aleatoriamente
 
 int main()
 {
@@ -45,8 +47,9 @@ int main()
     std::cout << "Servidor aguardando pacotes..." << std::endl;
 
     std::map<int, std::string> pacotesRecebidos;
-    int ultimoACK = 0;
-    int janelaAtual = JANELA_MAXIMA;
+    int ultimoPacoteContiguo = 0; // Último pacote recebido em ordem
+
+    srand(time(0)); // Inicializa a semente do gerador de números aleatórios
 
     while (true)
     {
@@ -62,28 +65,34 @@ int main()
         char dados[BUFFER_SIZE];
         sscanf(buffer, "%d|%s", &numeroPacote, dados);
 
+        // Simulação de perda de pacotes
+        if ((rand() % 100) < PERDA_PERCENTUAL)
+        {
+            std::cerr << "Pacote " << numeroPacote << " perdido (simulacao)!" << std::endl;
+            continue;
+        }
+
         pacotesRecebidos[numeroPacote] = dados;
-        std::cout << "Pacote " << numeroPacote << " recebido." << std::endl;
 
-        // Ajuste da janela: Se o servidor estiver sobrecarregado, reduz a janela
-        if (pacotesRecebidos.size() > JANELA_MAXIMA)
+        // Verifica se recebemos o próximo pacote esperado
+        if (numeroPacote == ultimoPacoteContiguo + 1)
         {
-            janelaAtual = std::max(1, janelaAtual - 1);
-        }
-        else
-        {
-            janelaAtual = std::min(JANELA_MAXIMA, janelaAtual + 1);
-        }
+            ultimoPacoteContiguo = numeroPacote;
 
-        while (pacotesRecebidos.count(ultimoACK + 1))
-        {
-            ultimoACK++;
+            // Atualiza o último pacote contíguo recebido corretamente
+            while (pacotesRecebidos.count(ultimoPacoteContiguo + 1))
+            {
+                ultimoPacoteContiguo++;
+            }
         }
 
-        char ackMsg[BUFFER_SIZE];
-        sprintf(ackMsg, "ACK %d JANELA %d", ultimoACK, janelaAtual);
-        sendto(serverSocket, ackMsg, sizeof(ackMsg), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
-        std::cout << "ACK " << ultimoACK << " enviado. Janela: " << janelaAtual << std::endl;
+        // Enviar ACK acumulativo para o cliente
+        char ackMsg[50];
+        sprintf(ackMsg, "ACK %d", ultimoPacoteContiguo);
+        sendto(serverSocket, ackMsg, sizeof(ackMsg), 0,
+               (struct sockaddr *)&clientAddr, clientAddrLen);
+
+        std::cout << "Pacote " << numeroPacote << " recebido. Enviando ACK " << ultimoPacoteContiguo << "." << std::endl;
     }
 
     closesocket(serverSocket);
