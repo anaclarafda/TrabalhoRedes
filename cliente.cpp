@@ -15,6 +15,7 @@ int main()
     SOCKET clientSocket;
     struct sockaddr_in serverAddr;
     char pacote[BUF_SIZE];
+    char resposta[BUF_SIZE];
     int pacotesEnviados = 0; // Contagem de pacotes enviados
 
     // Inicializa o Winsock
@@ -62,7 +63,19 @@ int main()
         logFile << pacotesEnviados + 1 << "," << currentTime << std::endl;
         std::cout << "Pacote " << pacotesEnviados + 1 << " enviado" << std::endl;
 
+        // Aguarda a confirmação do servidor (Janela de recepção)
+        int bytesReceived = recvfrom(clientSocket, resposta, BUF_SIZE, 0, NULL, NULL);
+        if (bytesReceived != SOCKET_ERROR)
+        {
+            std::cout << "Recebido ACK: " << resposta << std::endl;
+        }
+        else
+        {
+            std::cerr << "Erro ao receber ACK." << std::endl;
+        }
+
         pacotesEnviados++;
+        Sleep(1); // 1 milissegundos para simular uma rede com latência
     }
 
     logFile.close();

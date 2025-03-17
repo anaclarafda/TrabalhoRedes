@@ -9,6 +9,7 @@
 #define SERVER_PORT 8080
 #define BUFFER_SIZE 1024
 #define TOTAL_PACOTES 10000 // Total de pacotes a ser recebido
+#define JANELA_SIZE 10      // Tamanho da janela de recepção (quantos pacotes o servidor pode receber de uma vez)
 
 int main()
 {
@@ -17,6 +18,10 @@ int main()
     struct sockaddr_in serverAddr, clientAddr;
     int clientAddrLen = sizeof(clientAddr);
     char buffer[BUFFER_SIZE];
+    char ack[BUFFER_SIZE];
+    // Removido a declaração anterior de pacotesRecebidos como int
+    std::map<int, std::string> pacotesRecebidos; // Agora, pacotesRecebidos é um std::map
+    int ultimoPacoteRecebido = -1;
 
     // Inicializa o Winsock
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
@@ -49,10 +54,6 @@ int main()
     }
 
     std::cout << "Servidor aguardando pacotes..." << std::endl;
-
-    // Para armazenar pacotes na ordem correta
-    std::map<int, std::string> pacotesRecebidos;
-    int ultimoPacoteRecebido = -1;
 
     // Abrir o arquivo para registrar os pacotes recebidos
     std::ofstream logFile("pacotes_recebidos.txt");
@@ -93,8 +94,8 @@ int main()
         // Atualizar o último pacote recebido
         ultimoPacoteRecebido = numeroPacote;
 
-        // Enviar confirmação com o tamanho da janela para o remetente
-        std::string resposta = "Pacote " + std::to_string(numeroPacote) + " recebido.";
+        // Enviar confirmação para o cliente (tamanho da janela)
+        std::string resposta = "Pacote " + std::to_string(numeroPacote) + " recebido. Janela: " + std::to_string(JANELA_SIZE);
         sendto(serverSocket, resposta.c_str(), resposta.size(), 0, (struct sockaddr *)&clientAddr, clientAddrLen);
 
         // Registra o pacote recebido
